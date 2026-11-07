@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analizador SIEM</title>
+<style>
+  :root {
+    --fg: #111827;
+    --mut: #6b7280;
+    --line: #e5e7eb;
+    --soft: #f9fafb;
+    --bg: #ffffff;
+    --Bajo: #16a34a;
+    --Medio: #ca8a04;
+    --Alto: #ea580c;
+    --Crítico: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px; line-height: 1.5;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 48px 24px 80px; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--mut); margin: 0 0 32px; }
+  h2 {
+    font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--mut); margin: 44px 0 16px;
+  }
+
+  /* Carga */
+  .carga { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  input[type=file] { font: inherit; color: var(--mut); }
+  button {
+    font: inherit; font-weight: 500; background: var(--fg); color: #fff;
+    border: 0; border-radius: 6px; padding: 9px 16px; cursor: pointer;
+  }
+  button:hover { opacity: .85; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.sec { background: #fff; color: var(--fg); border: 1px solid var(--line); }
+  #estado { color: var(--mut); font-size: 14px; margin-top: 14px; min-height: 20px; }
+
+  /* KPIs */
+  #resultados[hidden] { display: none; }
+  .kpis {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px; margin-top: 32px;
+  }
+  .kpi { border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  .kpi span { display: block; font-size: 13px; color: var(--mut); }
+  .kpi b { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .kpi.riesgo b { font-size: 20px; }
+
+  /* Resumen + dona */
+  .dos { display: grid; grid-template-columns: 1.5fr 1fr; gap: 32px; align-items: start; }
+  @media (max-width: 720px) { .dos { grid-template-columns: 1fr; } }
+  .resumen p { margin: 0 0 12px; }
+  .resumen .tec { color: var(--mut); }
+  .resumen ul { padding-left: 18px; margin: 12px 0 0; }
+  .resumen li { margin-bottom: 4px; }
+  .acciones { margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .dona-wrap { display: flex; gap: 20px; align-items: center; }
+  .dona {
+    width: 128px; height: 128px; border-radius: 50%; flex: none; position: relative;
+    background: var(--line);
+  }
+  .dona::after {
+    content: attr(data-total); position: absolute; inset: 26px; border-radius: 50%;
+    background: var(--bg); display: grid; place-items: center;
+    font-size: 20px; font-weight: 600;
+  }
+  .leyenda { display: grid; gap: 6px; font-size: 14px; flex: 1; }
+  .leyenda div { display: flex; justify-content: space-between; align-items: center; }
+  .punto { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; }
+
+  /* Filtros */
+  .filtros { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .chip {
+    background: #fff; color: var(--mut); border: 1px solid var(--line);
+    padding: 5px 12px; border-radius: 999px; font-size: 13px; font-weight: 500;
+  }
+  .chip.activo { background: var(--fg); color: #fff; border-color: var(--fg); }
+
+  /* Hallazgos */
+  details { border-bottom: 1px solid var(--line); padding: 14px 0; }
+  details:first-of-type { border-top: 1px solid var(--line); }
+  summary {
+    cursor: pointer; list-style: none; display: flex; gap: 12px; align-items: center;
+  }
+  summary::-webkit-details-marker { display: none; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .titulo { font-weight: 500; }
+  .sevtxt {
+    font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 4px;
+    color: #fff; flex: none; background: var(--c);
+  }
+  .meta { color: var(--mut); font-size: 13px; margin-left: auto; white-space: nowrap; }
+  .cuerpo { padding: 14px 0 4px 20px; }
+  .cuerpo p { margin: 0 0 10px; }
+  .cuerpo .tec { color: var(--mut); font-size: 14px; }
+  .cuerpo ul { padding-left: 18px; margin: 8px 0 0; font-size: 14px; }
+  .tabla { overflow-x: auto; margin-top: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; font-family: Consolas, monospace; min-width: 600px; }
+  th { text-align: left; font-weight: 500; color: var(--mut); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--soft); }
+  .vacio { color: var(--mut); padding: 20px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Analizador SIEM</h1>
+  <p class="sub">Análisis de logs en local. Las explicaciones se generan con IA.</p>
+
+  <form id="f" class="carga">
+    <input type="file" name="archivo" id="archivo" accept=".xlsx,.xls,.csv" required>
+    <button id="btn" type="submit">Analizar</button>
+  </form>
+  <div id="estado"></div>
+
+  <section id="resultados" hidden>
+    <div class="kpis" id="kpis"></div>
+
+    <div class="dos">
+      <div>
+        <h2>Resumen</h2>
+        <div class="resumen" id="resumen"></div>
+        <div class="acciones">
+          <button class="sec" onclick="descargar('ejecutivo')">Informe ejecutivo</button>
+          <button class="sec" onclick="descargar('tecnico')">Informe técnico</button>
+        </div>
+      </div>
+      <div>
+        <h2>Severidad</h2>
+        <div class="dona-wrap">
+          <div class="dona" id="dona"></div>
+          <div class="leyenda" id="leyenda"></div>
+        </div>
+      </div>
+    </div>
+
+    <h2>Hallazgos</h2>
+    <div class="filtros" id="filtros">
+      <button class="chip activo" data-f="Todos">Todos</button>
+      <button class="chip" data-f="Crítico">Crítico</button>
+      <button class="chip" data-f="Alto">Alto</button>
+      <button class="chip" data-f="Medio">Medio</button>
+      <button class="chip" data-f="Bajo">Bajo</button>
+    </div>
+    <div id="hallazgos"></div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const color = s => `var(--${s})`;
+const HEX = { "Crítico": "#dc2626", "Alto": "#ea580c", "Medio": "#ca8a04", "Bajo": "#16a34a" };
+const ORDEN = ["Crítico", "Alto", "Medio", "Bajo"];
+let datos = null;
+
+$("f").onsubmit = async e => {
+  e.preventDefault();
+  $("btn").disabled = true;
+  $("estado").textContent = "Analizando… la IA puede tardar unos segundos por hallazgo.";
+  try {
+    const r = await fetch("/api/analizar", { method: "POST", body: new FormData($("f")) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Error al analizar");
+    $("estado").textContent = "";
+    datos = d;
+    render(d);
+  } catch (err) {
+    $("estado").textContent = err.message;
+  } finally {
+    $("btn").disabled = false;
+  }
+};
+
+function render(d) {
+  $("resultados").hidden = false;
+  const s = d.stats;
+  const kpis = [
+    ["Eventos", s.eventos_totales],
+    ["Fallos", s.fallos],
+    ["Éxitos", s.exitos],
+    ["Hallazgos", d.findings.length],
+  ].map(([k, v]) => `<div class="kpi"><span>${k}</span><b>${esc(v)}</b></div>`).join("");
+  $("kpis").innerHTML = kpis +
+    `<div class="kpi riesgo"><span>Riesgo global</span><b style="color:${color(d.overall_risk)}">${esc(d.overall_risk)}</b></div>`;
+
+  const r = d.resumen || {};
+  $("resumen").innerHTML =
+    `<p>${esc(r.resumen_ejecutivo)}</p><p class="tec">${esc(r.resumen_tecnico)}</p>` +
+    `<ul>${(r.recomendaciones || []).map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
+
+  renderDona(d.severidades || {});
+  pintarHallazgos(d.findings, "Todos");
+}
+
+function renderDona(sev) {
+  const total = ORDEN.reduce((a, k) => a + (sev[k] || 0), 0);
+  let acum = 0; const partes = [];
+  ORDEN.forEach(k => {
+    const n = sev[k] || 0;
+    if (!n || !total) return;
+    const ini = acum / total * 360;
+    acum += n;
+    partes.push(`${HEX[k]} ${ini}deg ${acum / total * 360}deg`);
+  });
+  $("dona").style.background = partes.length ? `conic-gradient(${partes.join(",")})` : "var(--line)";
+  $("dona").dataset.total = total;
+  $("leyenda").innerHTML = ORDEN.map(k =>
+    `<div><span><span class="punto" style="background:${HEX[k]}"></span>${k}</span><b>${sev[k] || 0}</b></div>`
+  ).join("");
+}
+
+function pintarHallazgos(lista, filtro) {
+  const items = lista.filter(h => filtro === "Todos" || h.severity === filtro);
+  $("hallazgos").innerHTML = items.map(h => `
+    <details>
+      <summary>
+        <span class="dot" style="background:${color(h.severity)}"></span>
+        <span class="titulo">${esc(h.title)}</span>
+        <span class="sevtxt" style="--c:${color(h.severity)}">${esc(h.severity)}</span>
+        <span class="meta">${h.count} eventos · MITRE ${esc(h.mitre || "N/D")}</span>
+      </summary>
+      <div class="cuerpo">
+        <p>${esc(h.explicacion_ejecutiva)}</p>
+        <p class="tec">${esc(h.explicacion_tecnica)}</p>
+        <ul>${(h.recomendaciones || []).map(x => `<li>${esc(x)}</li>`).join("")}</ul>
+        <div class="tabla">
+          <table>
+            <tr><th>Timestamp</th><th>Usuario</th><th>IP</th><th>Host</th><th>EventID</th><th>Comando</th></tr>
+            ${h.evidence.map(e => `<tr><td>${esc(e.timestamp)}</td><td>${esc(e.user)}</td>
+              <td>${esc(e.src_ip)}</td><td>${esc(e.host)}</td><td>${esc(e.event_id)}</td>
+              <td>${esc(e.command)}</td></tr>`).join("")}
+          </table>
+        </div>
+      </div>
+    </details>`).join("") || `<p class="vacio">No hay hallazgos en esta categoría.</p>`;
+}
+
+$("filtros").addEventListener("click", e => {
+  const chip = e.target.closest(".chip");
+  if (!chip || !datos) return;
+  document.querySelectorAll(".chip").forEach(c => c.classList.remove("activo"));
+  chip.classList.add("activo");
+  pintarHallazgos(datos.findings, chip.dataset.f);
+});
+
+function descargar(tipo) { window.location = `/api/informe/${tipo}`; }
+</script>
+</body>
+</html>
